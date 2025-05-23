@@ -10,10 +10,22 @@
     "start": "cd server && npm start",
     "install:all": "npm install && cd client && npm install && cd ../server && npm install"
   },
-  "keywords": ["read-later", "bookmarks", "articles", "pocket-clone"],
+  "keywords": [
+    "read-later",
+    "bookmarks",
+    "articles",
+    "pocket-clone"
+  ],
   "author": "Your Name",
   "license": "MIT",
   "devDependencies": {
+    "@types/jsdom": "^21.1.7",
+    "@types/sanitize-html": "^2.16.0",
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "@mozilla/readability": "^0.6.0",
+    "jsdom": "^26.1.0",
+    "sanitize-html": "^2.17.0"
   }
-} 
+}

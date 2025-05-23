@@ -1,5 +1,8 @@
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import sanitizeHtml from 'sanitize-html';
+import { Readability } from '@mozilla/readability';
+import { JSDOM } from 'jsdom';
 
 export interface ArticleMetadata {
   title: string;
@@ -36,8 +39,8 @@ export async function scrapeArticle(url: string): Promise<ArticleMetadata> {
                     $('meta[name="twitter:image"]').attr('content') ||
                     '';
 
-    // Extract main content with better formatting
-    const content = extractFormattedContent($);
+    // Extract main content using Mozilla Readability
+    const content = await extractReadableContent(response.data, url);
 
     // Clean up title
     title = title.trim().substring(0, 200);
@@ -72,55 +75,91 @@ export async function scrapeArticle(url: string): Promise<ArticleMetadata> {
   }
 }
 
-function extractFormattedContent($: cheerio.CheerioAPI): string {
-  // Remove unwanted elements
-  $('script, style, nav, header, footer, aside, .ad, .advertisement, .social, .comments, .sidebar, .related, .menu, iframe, noscript').remove();
-  
-  // Try to find the main content area
-  const selectors = [
-    'article',
-    '[role="main"]',
-    '.post-content',
-    '.entry-content', 
-    '.article-content',
-    '.content',
-    '.post-body',
-    '.article-body',
-    'main',
-    '.main-content',
-    '#content',
-    '#main',
-    'body'
-  ];
-  
-  let content = '';
-  
-  for (const selector of selectors) {
-    const element = $(selector).first();
-    if (element.length > 0) {
-      const text = element.text().trim();
-      if (text.length > 100) {
-        content = text;
-        break;
-      }
+async function extractReadableContent(html: string, baseUrl: string): Promise<string> {
+  try {
+    // Create a JSDOM instance with the HTML
+    const dom = new JSDOM(html, { url: baseUrl });
+    const document = dom.window.document;
+
+    // Use Mozilla Readability to extract the main article content
+    const reader = new Readability(document, {
+      // Keep images and maintain some formatting
+      keepClasses: false,
+    });
+
+    const article = reader.parse();
+
+    if (!article || !article.content) {
+      console.warn('Readability could not extract article content');
+      return '';
     }
-  }
-  
-  // If still no content, try getting paragraphs directly
-  if (!content) {
-    const paragraphs: string[] = [];
-    $('p').each((_, elem) => {
-      const text = $(elem).text().trim();
-      if (text.length > 20) {
-        paragraphs.push(text);
+
+    // Load the extracted content into Cheerio for further processing
+    const $ = cheerio.load(article.content);
+
+    // Convert relative URLs to absolute URLs for images and links
+    $('img').each((_, imgElem) => {
+      const img = $(imgElem);
+      let src = img.attr('src');
+      if (src) {
+        try {
+          const absoluteSrc = new URL(src, baseUrl).href;
+          img.attr('src', absoluteSrc);
+        } catch (e) {
+          console.warn(`Could not resolve image src: ${src} against base ${baseUrl}`);
+        }
+      }
+      img.attr('loading', 'lazy'); // Add lazy loading
+    });
+
+    $('a').each((_, anchorElem) => {
+      const anchor = $(anchorElem);
+      let href = anchor.attr('href');
+      if (href && !href.startsWith('#') && !href.startsWith('javascript:')) {
+        try {
+          const absoluteHref = new URL(href, baseUrl).href;
+          anchor.attr('href', absoluteHref);
+          anchor.attr('target', '_blank');
+          anchor.attr('rel', 'noopener noreferrer');
+        } catch (e) {
+          console.warn(`Could not resolve anchor href: ${href} against base ${baseUrl}`);
+        }
       }
     });
-    content = paragraphs.join('\n\n');
+
+    let finalHtml = $.html();
+
+    // Sanitize the HTML content
+    if (finalHtml) {
+      finalHtml = sanitizeHtml(finalHtml, {
+        allowedTags: sanitizeHtml.defaults.allowedTags.concat([ 
+          'img', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'figure', 'figcaption', 'iframe' 
+        ]),
+        allowedAttributes: {
+          ...sanitizeHtml.defaults.allowedAttributes,
+          'img': [ 'src', 'srcset', 'alt', 'title', 'width', 'height', 'loading' ],
+          'a': [ 'href', 'name', 'target', 'rel' ],
+          'iframe': [ 'src', 'width', 'height', 'frameborder', 'allowfullscreen', 'sandbox' ] 
+        },
+        // Allow common inline styling for things like text alignment, but be cautious
+        allowedStyles: {
+          '*': {
+            'color': [/^#(0x)?[0-9a-f]+$/i, /^rgb\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*\)$/],
+            'text-align': [/^left$/, /^right$/, /^center$/, /^justify$/],
+            'font-weight': [/^bold$/, /^normal$/],
+            'font-style': [/^italic$/, /^normal$/],
+            'text-decoration': [/^underline$/, /^line-through$/, /^none$/]
+          }
+        },
+        // Allow iframes from trusted sources like YouTube, Vimeo etc.
+        allowedIframeHostnames: ['www.youtube.com', 'player.vimeo.com']
+      });
+    }
+
+    return finalHtml ? finalHtml.trim() : '';
+
+  } catch (error) {
+    console.error('Error extracting readable content:', error);
+    return '';
   }
-  
-  // Clean up content
-  return content
-    .replace(/\s+/g, ' ') // Normalize whitespace
-    .replace(/\n{3,}/g, '\n\n') // Remove excessive line breaks
-    .trim();
 } 
