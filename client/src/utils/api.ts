@@ -45,6 +45,8 @@ export const articlesAPI = {
     is_favorite?: boolean;
   }) => api.get<Article[]>('/articles', { params }),
   
+  getArticle: (id: number) => api.get<Article>(`/articles/${id}`),
+  
   addArticle: (url: string, tags?: string[]) =>
     api.post<Article>('/articles', { url, tags }),
   

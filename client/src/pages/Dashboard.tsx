@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Article } from '../types';
 import { articlesAPI } from '../utils/api';
-import { Plus, Search, Filter, BookOpen, ExternalLink, Heart, Check, Trash2, Tag } from 'lucide-react';
+import { Plus, Search, Filter, BookOpen, ExternalLink, Heart, Check, Trash2, Tag, Eye } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [articles, setArticles] = useState<Article[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [newUrl, setNewUrl] = useState('');
@@ -84,6 +86,10 @@ const Dashboard: React.FC = () => {
     } catch (error) {
       toast.error('Failed to delete article');
     }
+  };
+
+  const handleReadArticle = (articleId: number) => {
+    navigate(`/article/${articleId}`);
   };
 
   const formatDate = (dateString: string) => {
@@ -192,7 +198,8 @@ const Dashboard: React.FC = () => {
                 <img
                   src={article.image_url}
                   alt={article.title}
-                  className="w-full h-48 object-cover rounded-lg mb-4"
+                  className="w-full h-48 object-cover rounded-lg mb-4 cursor-pointer"
+                  onClick={() => handleReadArticle(article.id)}
                   onError={(e) => {
                     e.currentTarget.style.display = 'none';
                   }}
@@ -200,7 +207,10 @@ const Dashboard: React.FC = () => {
               )}
               
               <div className="space-y-3">
-                <h3 className="font-semibold text-gray-900 line-clamp-2">
+                <h3 
+                  className="font-semibold text-gray-900 line-clamp-2 cursor-pointer hover:text-primary-600 transition-colors"
+                  onClick={() => handleReadArticle(article.id)}
+                >
                   {article.title}
                 </h3>
                 
@@ -219,6 +229,15 @@ const Dashboard: React.FC = () => {
                     ))}
                   </div>
                 )}
+
+                {/* Read Button */}
+                <button
+                  onClick={() => handleReadArticle(article.id)}
+                  className="w-full btn-primary flex items-center justify-center mb-3"
+                >
+                  <Eye className="h-4 w-4 mr-2" />
+                  Read Article
+                </button>
 
                 <div className="flex items-center justify-between text-xs text-gray-500">
                   <span>{formatDate(article.created_at)}</span>

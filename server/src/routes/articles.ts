@@ -53,6 +53,36 @@ router.get('/', authenticateToken, (req: AuthRequest, res) => {
   }
 });
 
+// Get single article by ID
+router.get('/:id', authenticateToken, (req: AuthRequest, res) => {
+  try {
+    const userId = req.userId;
+    const articleId = parseInt(req.params.id);
+
+    if (isNaN(articleId)) {
+      return res.status(400).json({ error: 'Invalid article ID' });
+    }
+
+    // Get article and verify it belongs to the user
+    const article = db.prepare('SELECT * FROM articles WHERE id = ? AND user_id = ?').get(articleId, userId) as any;
+    
+    if (!article) {
+      return res.status(404).json({ error: 'Article not found' });
+    }
+
+    // Parse tags
+    const articleWithTags = {
+      ...article,
+      tags: article.tags ? article.tags.split(',').filter((tag: string) => tag.trim()) : []
+    };
+
+    res.json(articleWithTags);
+  } catch (error) {
+    console.error('Error fetching article:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Add new article
 router.post('/', authenticateToken, async (req: AuthRequest, res) => {
   try {

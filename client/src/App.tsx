@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import ArticleReader from './pages/ArticleReader';
 import Layout from './components/Layout';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -52,6 +53,11 @@ function AppRoutes() {
           <Layout>
             <Dashboard />
           </Layout>
+        </ProtectedRoute>
+      } />
+      <Route path="/article/:id" element={
+        <ProtectedRoute>
+          <ArticleReader />
         </ProtectedRoute>
       } />
       <Route path="*" element={<Navigate to="/" replace />} />
