@@ -36,14 +36,8 @@ export async function scrapeArticle(url: string): Promise<ArticleMetadata> {
                     $('meta[name="twitter:image"]').attr('content') ||
                     '';
 
-    // Extract main content (simplified)
-    $('script, style, nav, header, footer, aside').remove();
-    const content = $('article, .content, .post, .entry, main, .article-body')
-                    .first()
-                    .text()
-                    .trim()
-                    .substring(0, 5000) || // Limit content length
-                    $('p').slice(0, 5).text().trim();
+    // Extract main content with better formatting
+    const content = extractFormattedContent($);
 
     // Clean up title
     title = title.trim().substring(0, 200);
@@ -64,7 +58,7 @@ export async function scrapeArticle(url: string): Promise<ArticleMetadata> {
       title,
       description: description.substring(0, 500),
       image_url: image_url || undefined,
-      content: content.substring(0, 5000) || undefined
+      content: content || undefined
     };
 
   } catch (error) {
@@ -76,4 +70,57 @@ export async function scrapeArticle(url: string): Promise<ArticleMetadata> {
       description: 'Failed to fetch article content',
     };
   }
+}
+
+function extractFormattedContent($: cheerio.CheerioAPI): string {
+  // Remove unwanted elements
+  $('script, style, nav, header, footer, aside, .ad, .advertisement, .social, .comments, .sidebar, .related, .menu, iframe, noscript').remove();
+  
+  // Try to find the main content area
+  const selectors = [
+    'article',
+    '[role="main"]',
+    '.post-content',
+    '.entry-content', 
+    '.article-content',
+    '.content',
+    '.post-body',
+    '.article-body',
+    'main',
+    '.main-content',
+    '#content',
+    '#main',
+    'body'
+  ];
+  
+  let content = '';
+  
+  for (const selector of selectors) {
+    const element = $(selector).first();
+    if (element.length > 0) {
+      const text = element.text().trim();
+      if (text.length > 100) {
+        content = text;
+        break;
+      }
+    }
+  }
+  
+  // If still no content, try getting paragraphs directly
+  if (!content) {
+    const paragraphs: string[] = [];
+    $('p').each((_, elem) => {
+      const text = $(elem).text().trim();
+      if (text.length > 20) {
+        paragraphs.push(text);
+      }
+    });
+    content = paragraphs.join('\n\n');
+  }
+  
+  // Clean up content
+  return content
+    .replace(/\s+/g, ' ') // Normalize whitespace
+    .replace(/\n{3,}/g, '\n\n') // Remove excessive line breaks
+    .trim();
 } 

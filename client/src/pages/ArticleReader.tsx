@@ -76,12 +76,154 @@ const ArticleReader: React.FC = () => {
   };
 
   const formatContent = (content: string) => {
-    // Simple content formatting - split by double newlines for paragraphs
-    return content.split('\n\n').map((paragraph, index) => (
-      <p key={index} className="mb-4">
-        {paragraph.trim()}
-      </p>
-    ));
+    if (!content) return null;
+
+    // Clean up the content
+    let cleanContent = content
+      .trim()
+      // Remove excessive whitespace
+      .replace(/\r\n/g, '\n')
+      .replace(/\r/g, '\n')
+      // Normalize line breaks
+      .replace(/\n{3,}/g, '\n\n')
+      // Remove leading/trailing whitespace from lines
+      .split('\n')
+      .map(line => line.trim())
+      .join('\n');
+
+    // Split into blocks (paragraphs, headings, etc.)
+    const blocks = cleanContent.split(/\n\s*\n/).filter(block => block.trim());
+
+    return blocks.map((block, index) => {
+      const trimmedBlock = block.trim();
+      
+      // Skip empty blocks
+      if (!trimmedBlock) return null;
+
+      // Check if it's a heading (starts with common heading patterns)
+      if (isHeading(trimmedBlock)) {
+        const level = getHeadingLevel(trimmedBlock);
+        const headingText = trimmedBlock.replace(/^#{1,6}\s*/, '').trim();
+        
+        const HeadingTag = `h${level}` as keyof JSX.IntrinsicElements;
+        const headingClasses = {
+          1: 'text-2xl font-bold text-gray-900 mt-8 mb-4',
+          2: 'text-xl font-semibold text-gray-900 mt-6 mb-3',
+          3: 'text-lg font-semibold text-gray-900 mt-5 mb-2',
+          4: 'text-base font-semibold text-gray-900 mt-4 mb-2',
+          5: 'text-sm font-semibold text-gray-900 mt-3 mb-1',
+          6: 'text-sm font-medium text-gray-900 mt-2 mb-1'
+        };
+
+        return (
+          <HeadingTag key={index} className={headingClasses[level as keyof typeof headingClasses]}>
+            {headingText}
+          </HeadingTag>
+        );
+      }
+
+      // Check if it's a list
+      if (isList(trimmedBlock)) {
+        return formatList(trimmedBlock, index);
+      }
+
+      // Check if it's a quote
+      if (isQuote(trimmedBlock)) {
+        const quoteText = trimmedBlock.replace(/^>\s*/, '').trim();
+        return (
+          <blockquote key={index} className="border-l-4 border-primary-200 pl-4 italic text-gray-700 my-6">
+            {formatInlineContent(quoteText)}
+          </blockquote>
+        );
+      }
+
+      // Regular paragraph
+      return (
+        <p key={index} className="mb-4 leading-relaxed">
+          {formatInlineContent(trimmedBlock)}
+        </p>
+      );
+    }).filter(Boolean);
+  };
+
+  const isHeading = (text: string): boolean => {
+    // Check for markdown-style headings or text that looks like a heading
+    return /^#{1,6}\s/.test(text) || 
+           (text.length < 100 && text.length > 5 && 
+            !text.includes('.') && 
+            /^[A-Z]/.test(text) &&
+            text === text.toUpperCase());
+  };
+
+  const getHeadingLevel = (text: string): number => {
+    const match = text.match(/^(#{1,6})\s/);
+    if (match) return match[1].length;
+    
+    // Determine level based on text characteristics
+    if (text.length < 30) return 2;
+    if (text.length < 50) return 3;
+    return 4;
+  };
+
+  const isList = (text: string): boolean => {
+    const lines = text.split('\n');
+    return lines.length > 1 && lines.every(line => 
+      /^\s*[-*+•]\s/.test(line) || /^\s*\d+\.\s/.test(line)
+    );
+  };
+
+  const formatList = (text: string, key: number) => {
+    const lines = text.split('\n').filter(line => line.trim());
+    const isOrdered = /^\s*\d+\.\s/.test(lines[0]);
+    
+    const ListTag = isOrdered ? 'ol' : 'ul';
+    const listClass = isOrdered ? 'list-decimal list-inside mb-4 pl-4' : 'list-disc list-inside mb-4 pl-4';
+
+    return (
+      <ListTag key={key} className={listClass}>
+        {lines.map((line, lineIndex) => {
+          const cleanLine = line.replace(/^\s*[-*+•]\s/, '').replace(/^\s*\d+\.\s/, '').trim();
+          return (
+            <li key={lineIndex} className="mb-1">
+              {formatInlineContent(cleanLine)}
+            </li>
+          );
+        })}
+      </ListTag>
+    );
+  };
+
+  const isQuote = (text: string): boolean => {
+    return text.startsWith('>') || 
+           (text.startsWith('"') && text.endsWith('"')) ||
+           (text.startsWith('"') && text.endsWith('"'));
+  };
+
+  const formatInlineContent = (text: string) => {
+    // Handle basic inline formatting like bold, italic, links
+    return text
+      .split(/(\*\*[^*]+\*\*|\*[^*]+\*|_[^_]+_|https?:\/\/[^\s]+)/g)
+      .map((part, index) => {
+        // Bold text
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={index}>{part.slice(2, -2)}</strong>;
+        }
+        // Italic text
+        if ((part.startsWith('*') && part.endsWith('*')) || 
+            (part.startsWith('_') && part.endsWith('_'))) {
+          return <em key={index}>{part.slice(1, -1)}</em>;
+        }
+        // Links
+        if (part.startsWith('http')) {
+          return (
+            <a key={index} href={part} target="_blank" rel="noopener noreferrer" 
+               className="text-primary-600 underline hover:text-primary-700">
+              {part}
+            </a>
+          );
+        }
+        return part;
+      });
   };
 
   if (isLoading) {
